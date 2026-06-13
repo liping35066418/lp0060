@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>图片裁切与拼接工具</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <h1>图片裁切与拼接工具</h1>
+      <p class="subtitle">支持图片拼接、分割、批量处理与打包下载</p>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="merge">
+        <span class="tab-icon">📎</span>
+        图片拼接
+      </button>
+      <button class="tab-btn" data-tab="split">
+        <span class="tab-icon">✂️</span>
+        图片分割
+      </button>
+    </nav>
+
+    <main class="main-content">
+      <section id="merge-tab" class="tab-content active">
+        <div class="panel">
+          <div class="panel-header">
+            <h2>上传图片</h2>
+            <span class="hint">支持 JPG、PNG、GIF、WebP、BMP、TIFF 格式</span>
+          </div>
+          <div class="upload-area" id="merge-upload">
+            <div class="upload-placeholder">
+              <div class="upload-icon">📁</div>
+              <p>点击或拖拽图片到此处上传</p>
+              <p class="upload-hint">可上传多张图片</p>
+            </div>
+            <input type="file" id="merge-file-input" multiple accept="image/*" hidden>
+          </div>
+          <div class="image-list" id="merge-image-list"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h2>拼接设置</h2>
+          </div>
+          <div class="settings-grid">
+            <div class="setting-item">
+              <label>拼接方向</label>
+              <div class="btn-group">
+                <button class="option-btn active" data-direction="horizontal">横向</button>
+                <button class="option-btn" data-direction="vertical">纵向</button>
+              </div>
+            </div>
+            <div class="setting-item">
+              <label>边距 (像素)</label>
+              <input type="number" id="merge-margin" value="0" min="0" max="500" class="number-input">
+            </div>
+            <div class="setting-item">
+              <label>背景颜色</label>
+              <div class="color-picker-wrapper">
+                <input type="color" id="merge-bgcolor" value="#ffffff">
+                <input type="text" id="merge-bgcolor-text" value="#ffffff" class="text-input">
+              </div>
+            </div>
+            <div class="setting-item">
+              <label>排序方式</label>
+              <select id="merge-order" class="select-input">
+                <option value="original">原始顺序</option>
+                <option value="name">按名称排序</option>
+                <option value="size">按大小排序</option>
+                <option value="reverse">倒序</option>
+              </select>
+            </div>
+            <div class="setting-item">
+              <label>批量拼接</label>
+              <div class="btn-group">
+                <button class="option-btn active" data-batch="single">单组</button>
+                <button class="option-btn" data-batch="batch">批量</button>
+              </div>
+            </div>
+            <div class="setting-item" id="batch-size-item" style="display: none;">
+              <label>每组图片数</label>
+              <input type="number" id="batch-size" value="2" min="2" max="50" class="number-input">
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h2>操作</h2>
+          </div>
+          <div class="actions">
+            <button class="btn btn-primary" id="merge-preview-btn">
+              <span>🔍</span> 预览效果
+            </button>
+            <button class="btn btn-success" id="merge-download-btn" disabled>
+              <span>💾</span> 下载结果
+            </button>
+          </div>
+        </div>
+
+        <div class="panel preview-panel" id="merge-preview-panel" style="display: none;">
+          <div class="panel-header">
+            <h2>预览结果</h2>
+            <span class="preview-info" id="merge-preview-info"></span>
+          </div>
+          <div class="preview-container">
+            <img id="merge-preview-img" alt="拼接预览">
+          </div>
+        </div>
+      </section>
+
+      <section id="split-tab" class="tab-content">
+        <div class="panel">
+          <div class="panel-header">
+            <h2>上传图片</h2>
+            <span class="hint">支持 JPG、PNG、GIF、WebP、BMP、TIFF 格式</span>
+          </div>
+          <div class="upload-area" id="split-upload">
+            <div class="upload-placeholder">
+              <div class="upload-icon">📁</div>
+              <p>点击或拖拽图片到此处上传</p>
+              <p class="upload-hint">单张图片进行分割</p>
+            </div>
+            <input type="file" id="split-file-input" accept="image/*" hidden>
+          </div>
+          <div class="image-list" id="split-image-list"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h2>分割设置</h2>
+          </div>
+          <div class="settings-grid">
+            <div class="setting-item">
+              <label>行数</label>
+              <input type="number" id="split-rows" value="2" min="1" max="20" class="number-input">
+            </div>
+            <div class="setting-item">
+              <label>列数</label>
+              <input type="number" id="split-cols" value="2" min="1" max="20" class="number-input">
+            </div>
+          </div>
+          <div class="split-preview-hint" id="split-hint">
+            将图片等分为 <span id="split-hint-rows">2</span> 行 × <span id="split-hint-cols">2</span> 列
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h2>操作</h2>
+          </div>
+          <div class="actions">
+            <button class="btn btn-primary" id="split-preview-btn" disabled>
+              <span>✂️</span> 开始分割
+            </button>
+            <button class="btn btn-success" id="split-download-btn" disabled>
+              <span>📦</span> 打包下载
+            </button>
+          </div>
+        </div>
+
+        <div class="panel preview-panel" id="split-preview-panel" style="display: none;">
+          <div class="panel-header">
+            <h2>分割结果</h2>
+            <span class="preview-info" id="split-preview-info"></span>
+          </div>
+          <div class="split-grid" id="split-grid"></div>
+        </div>
+      </section>
+    </main>
+
+    <div class="loading-overlay" id="loading-overlay" style="display: none;">
+      <div class="loading-spinner"></div>
+      <p class="loading-text" id="loading-text">处理中...</p>
+    </div>
+
+    <div class="toast" id="toast" style="display: none;"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
