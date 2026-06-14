@@ -7,6 +7,8 @@ let splitResult = null;
 let mergeDirection = 'horizontal';
 let batchMode = 'single';
 let batchMergeResult = null;
+let alignScale = true;
+let hasDragged = false;
 
 function showToast(message, type = 'info') {
   const toast = document.getElementById('toast');
@@ -117,6 +119,7 @@ async function handleMergeFiles(files) {
         previewUrl: URL.createObjectURL(files[i])
       }));
       mergeImages = mergeImages.concat(newImages);
+      hasDragged = false;
       renderMergeImageList();
       showToast(`成功上传 ${newImages.length} 张图片`, 'success');
     } else {
@@ -210,6 +213,7 @@ function handleDropOnItem(e) {
     const draggedImg = mergeImages[draggedIndex];
     mergeImages.splice(draggedIndex, 1);
     mergeImages.splice(targetIndex, 0, draggedImg);
+    hasDragged = true;
     renderMergeImageList();
   }
   
@@ -351,6 +355,15 @@ function initMergeSettings() {
       bgColorInput.value = val;
     }
   });
+
+  const alignScaleBtns = document.querySelectorAll('[data-align-scale]');
+  alignScaleBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      alignScaleBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      alignScale = btn.dataset.alignScale === 'true';
+    });
+  });
 }
 
 function initSplitSettings() {
@@ -394,7 +407,7 @@ async function handleSingleMerge() {
   try {
     const margin = parseInt(document.getElementById('merge-margin').value) || 0;
     const bgColor = document.getElementById('merge-bgcolor-text').value || '#ffffff';
-    const order = document.getElementById('merge-order').value;
+    const order = hasDragged ? 'original' : document.getElementById('merge-order').value;
 
     const response = await fetch(`${API_BASE}/merge`, {
       method: 'POST',
@@ -412,7 +425,8 @@ async function handleSingleMerge() {
         direction: mergeDirection,
         margin: margin,
         bgColor: bgColor,
-        order: order
+        order: order,
+        alignScale: alignScale
       })
     });
 
@@ -447,7 +461,7 @@ async function handleBatchMerge() {
   try {
     const margin = parseInt(document.getElementById('merge-margin').value) || 0;
     const bgColor = document.getElementById('merge-bgcolor-text').value || '#ffffff';
-    const order = document.getElementById('merge-order').value;
+    const order = hasDragged ? 'original' : document.getElementById('merge-order').value;
 
     let orderedImages = [...mergeImages];
     if (order === 'name') {
@@ -471,7 +485,8 @@ async function handleBatchMerge() {
           })),
           direction: mergeDirection,
           margin: margin,
-          bgColor: bgColor
+          bgColor: bgColor,
+          alignScale: alignScale
         });
       }
     }

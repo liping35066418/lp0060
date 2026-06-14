@@ -119,9 +119,129 @@ app.post('/api/upload', upload.array('images', 100), (req, res) => {
   }
 });
 
+async function mergeImagesGroup(images, direction = 'horizontal', margin = 0, bgColor = '#ffffff', alignScale = false, outputDir = OUTPUT_DIR) {
+  const imageInfos = [];
+  for (const img of images) {
+    const metadata = await sharp(img.path).metadata();
+    imageInfos.push({
+      path: img.path,
+      width: metadata.width,
+      height: metadata.height,
+      channels: metadata.channels
+    });
+  }
+
+  let processedInfos = imageInfos;
+  let scaledBuffers = null;
+
+  if (alignScale) {
+    scaledBuffers = [];
+    if (direction === 'horizontal') {
+      const targetHeight = Math.max(...imageInfos.map(img => img.height));
+      for (const imgInfo of imageInfos) {
+        const scale = targetHeight / imgInfo.height;
+        const newWidth = Math.round(imgInfo.width * scale);
+        const buffer = await sharp(imgInfo.path)
+          .resize(newWidth, targetHeight, { fit: 'fill' })
+          .toBuffer();
+        scaledBuffers.push({
+          buffer: buffer,
+          width: newWidth,
+          height: targetHeight,
+          channels: imgInfo.channels
+        });
+      }
+      processedInfos = scaledBuffers.map((s, i) => ({
+        ...imageInfos[i],
+        width: s.width,
+        height: s.height,
+        buffer: s.buffer
+      }));
+    } else {
+      const targetWidth = Math.max(...imageInfos.map(img => img.width));
+      for (const imgInfo of imageInfos) {
+        const scale = targetWidth / imgInfo.width;
+        const newHeight = Math.round(imgInfo.height * scale);
+        const buffer = await sharp(imgInfo.path)
+          .resize(targetWidth, newHeight, { fit: 'fill' })
+          .toBuffer();
+        scaledBuffers.push({
+          buffer: buffer,
+          width: targetWidth,
+          height: newHeight,
+          channels: imgInfo.channels
+        });
+      }
+      processedInfos = scaledBuffers.map((s, i) => ({
+        ...imageInfos[i],
+        width: s.width,
+        height: s.height,
+        buffer: s.buffer
+      }));
+    }
+  }
+
+  let totalWidth, totalHeight;
+  if (direction === 'horizontal') {
+    totalWidth = processedInfos.reduce((sum, img) => sum + img.width, 0) + margin * (processedInfos.length + 1);
+    totalHeight = Math.max(...processedInfos.map(img => img.height)) + margin * 2;
+  } else {
+    totalWidth = Math.max(...processedInfos.map(img => img.width)) + margin * 2;
+    totalHeight = processedInfos.reduce((sum, img) => sum + img.height, 0) + margin * (processedInfos.length + 1);
+  }
+
+  const bgColorHex = bgColor.startsWith('#') ? bgColor : `#${bgColor}`;
+  const hasAlpha = processedInfos.some(img => img.channels === 4);
+  const outputFormat = hasAlpha ? 'png' : 'jpeg';
+
+  let canvas = sharp({
+    create: {
+      width: totalWidth,
+      height: totalHeight,
+      channels: hasAlpha ? 4 : 3,
+      background: bgColorHex
+    }
+  });
+
+  const composites = [];
+  let currentPos = margin;
+
+  for (const imgInfo of processedInfos) {
+    let x, y;
+    if (direction === 'horizontal') {
+      x = currentPos;
+      y = margin + Math.floor((totalHeight - margin * 2 - imgInfo.height) / 2);
+      currentPos += imgInfo.width + margin;
+    } else {
+      x = margin + Math.floor((totalWidth - margin * 2 - imgInfo.width) / 2);
+      y = currentPos;
+      currentPos += imgInfo.height + margin;
+    }
+
+    composites.push({
+      input: imgInfo.buffer || imgInfo.path,
+      left: x,
+      top: y
+    });
+  }
+
+  const outputId = uuidv4();
+  const outputPath = path.join(outputDir, `${outputId}.${outputFormat}`);
+
+  await canvas.composite(composites).toFile(outputPath);
+
+  return {
+    outputId: outputId,
+    outputPath: outputPath,
+    width: totalWidth,
+    height: totalHeight,
+    format: outputFormat
+  };
+}
+
 app.post('/api/merge', upload.none(), async (req, res) => {
   try {
-    const { images, direction = 'horizontal', margin = 0, bgColor = '#ffffff', order = 'original' } = req.body;
+    const { images, direction = 'horizontal', margin = 0, bgColor = '#ffffff', order = 'original', alignScale = false } = req.body;
     
     if (!images || !Array.isArray(images) || images.length === 0) {
       return res.status(400).json({ success: false, error: '请提供至少一张图片' });
@@ -137,77 +257,19 @@ app.post('/api/merge', upload.none(), async (req, res) => {
       imageList.reverse();
     }
 
-    const imageInfos = [];
-    for (const img of imageList) {
-      const metadata = await sharp(img.path).metadata();
-      imageInfos.push({
-        path: img.path,
-        width: metadata.width,
-        height: metadata.height,
-        channels: metadata.channels
-      });
-    }
+    const result = await mergeImagesGroup(imageList, direction, margin, bgColor, alignScale);
 
-    let totalWidth, totalHeight;
-    if (direction === 'horizontal') {
-      totalWidth = imageInfos.reduce((sum, img) => sum + img.width, 0) + margin * (imageInfos.length + 1);
-      totalHeight = Math.max(...imageInfos.map(img => img.height)) + margin * 2;
-    } else {
-      totalWidth = Math.max(...imageInfos.map(img => img.width)) + margin * 2;
-      totalHeight = imageInfos.reduce((sum, img) => sum + img.height, 0) + margin * (imageInfos.length + 1);
-    }
-
-    const bgColorHex = bgColor.startsWith('#') ? bgColor : `#${bgColor}`;
-    const hasAlpha = imageInfos.some(img => img.channels === 4);
-    const outputFormat = hasAlpha ? 'png' : 'jpeg';
-
-    let canvas = sharp({
-      create: {
-        width: totalWidth,
-        height: totalHeight,
-        channels: hasAlpha ? 4 : 3,
-        background: bgColorHex
-      }
-    });
-
-    const composites = [];
-    let currentPos = margin;
-
-    for (const imgInfo of imageInfos) {
-      let x, y;
-      if (direction === 'horizontal') {
-        x = currentPos;
-        y = margin + Math.floor((totalHeight - margin * 2 - imgInfo.height) / 2);
-        currentPos += imgInfo.width + margin;
-      } else {
-        x = margin + Math.floor((totalWidth - margin * 2 - imgInfo.width) / 2);
-        y = currentPos;
-        currentPos += imgInfo.height + margin;
-      }
-
-      composites.push({
-        input: imgInfo.path,
-        left: x,
-        top: y
-      });
-    }
-
-    const outputId = uuidv4();
-    const outputPath = path.join(OUTPUT_DIR, `${outputId}.${outputFormat}`);
-
-    await canvas.composite(composites).toFile(outputPath);
-
-    const outputFilename = `merged_${Date.now()}.${outputFormat}`;
+    const outputFilename = `merged_${Date.now()}.${result.format}`;
     
     res.json({
       success: true,
-      outputId: outputId,
+      outputId: result.outputId,
       filename: outputFilename,
-      path: outputPath,
-      url: `/api/download/${outputId}.${outputFormat}`,
-      width: totalWidth,
-      height: totalHeight,
-      format: outputFormat
+      path: result.outputPath,
+      url: `/api/download/${result.outputId}.${result.format}`,
+      width: result.width,
+      height: result.height,
+      format: result.format
     });
   } catch (err) {
     console.error('拼接失败:', err);
@@ -325,76 +387,22 @@ app.post('/api/batch-merge', upload.none(), async (req, res) => {
 
     for (let i = 0; i < groups.length; i++) {
       const group = groups[i];
-      const { images, direction = 'horizontal', margin = 0, bgColor = '#ffffff' } = group;
+      const { images, direction = 'horizontal', margin = 0, bgColor = '#ffffff', alignScale = false } = group;
 
       if (!images || images.length === 0) continue;
 
-      const imageInfos = [];
-      for (const img of images) {
-        const metadata = await sharp(img.path).metadata();
-        imageInfos.push({
-          path: img.path,
-          width: metadata.width,
-          height: metadata.height,
-          channels: metadata.channels
-        });
-      }
+      const result = await mergeImagesGroup(images, direction, margin, bgColor, alignScale, outputDir);
 
-      let totalWidth, totalHeight;
-      if (direction === 'horizontal') {
-        totalWidth = imageInfos.reduce((sum, img) => sum + img.width, 0) + margin * (imageInfos.length + 1);
-        totalHeight = Math.max(...imageInfos.map(img => img.height)) + margin * 2;
-      } else {
-        totalWidth = Math.max(...imageInfos.map(img => img.width)) + margin * 2;
-        totalHeight = imageInfos.reduce((sum, img) => sum + img.height, 0) + margin * (imageInfos.length + 1);
-      }
-
-      const bgColorHex = bgColor.startsWith('#') ? bgColor : `#${bgColor}`;
-      const hasAlpha = imageInfos.some(img => img.channels === 4);
-      const outputFormat = hasAlpha ? 'png' : 'jpeg';
-
-      let canvas = sharp({
-        create: {
-          width: totalWidth,
-          height: totalHeight,
-          channels: hasAlpha ? 4 : 3,
-          background: bgColorHex
-        }
-      });
-
-      const composites = [];
-      let currentPos = margin;
-
-      for (const imgInfo of imageInfos) {
-        let x, y;
-        if (direction === 'horizontal') {
-          x = currentPos;
-          y = margin + Math.floor((totalHeight - margin * 2 - imgInfo.height) / 2);
-          currentPos += imgInfo.width + margin;
-        } else {
-          x = margin + Math.floor((totalWidth - margin * 2 - imgInfo.width) / 2);
-          y = currentPos;
-          currentPos += imgInfo.height + margin;
-        }
-
-        composites.push({
-          input: imgInfo.path,
-          left: x,
-          top: y
-        });
-      }
-
-      const outputFilename = `merged_group_${i + 1}.${outputFormat}`;
-      const outputPath = path.join(outputDir, outputFilename);
-
-      await canvas.composite(composites).toFile(outputPath);
+      const outputFilename = `merged_group_${i + 1}.${result.format}`;
+      const newOutputPath = path.join(outputDir, outputFilename);
+      fs.renameSync(result.outputPath, newOutputPath);
 
       results.push({
         groupIndex: i + 1,
         filename: outputFilename,
-        path: outputPath,
-        width: totalWidth,
-        height: totalHeight
+        path: newOutputPath,
+        width: result.width,
+        height: result.height
       });
     }
 
