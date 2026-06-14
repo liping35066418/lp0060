@@ -505,21 +505,22 @@ async function handleBatchMerge() {
 
 function renderSingleMergePreview(data) {
   const previewPanel = document.getElementById('merge-preview-panel');
-  const previewImg = document.getElementById('merge-preview-img');
   const previewInfo = document.getElementById('merge-preview-info');
 
-  previewImg.src = `${window.location.origin}/static/${data.outputId}.${data.format}`;
-  previewImg.style.display = 'block';
-  
   const grid = document.getElementById('merge-preview-grid');
   if (grid) grid.remove();
-  
+
+  const container = previewPanel.querySelector('.preview-container');
+  container.innerHTML = '';
+  const previewImg = document.createElement('img');
+  previewImg.id = 'merge-preview-img';
+  previewImg.alt = '拼接预览';
+  previewImg.src = `${window.location.origin}/static/${data.outputId}.${data.format}`;
+  previewImg.style.display = 'block';
+  container.appendChild(previewImg);
+
   previewInfo.textContent = `${data.width} × ${data.height} 像素 · ${data.format.toUpperCase()}`;
   previewPanel.style.display = 'block';
-  
-  const container = previewPanel.querySelector('.preview-container');
-  container.innerHTML = '<img id="merge-preview-img" alt="拼接预览">';
-  document.getElementById('merge-preview-img').src = `${window.location.origin}/static/${data.outputId}.${data.format}`;
 }
 
 function renderBatchMergePreview(data) {
